@@ -1,64 +1,17 @@
 package fr.cpe.service;
 
-// ╔══════════════════════════════════════════════════════════════════════════════╗
-// ║                                                                            ║
-// ║   ✏️  FICHIER MODIFIABLE — C'est le cœur de votre projet                   ║
-// ║                                                                            ║
-// ║   Le code actuel est un EXEMPLE (une balle qui rebondit).                  ║
-// ║   Remplacez-le entièrement par votre propre logique de jeu.                ║
-// ║                                                                            ║
-// ║   Gardez juste la structure init() / update() car GameEngine              ║
-// ║   les appelle automatiquement.                                             ║
-// ║                                                                            ║
-// ╚══════════════════════════════════════════════════════════════════════════════╝
-
-import com.google.inject.Inject;
-import javafx.scene.layout.Pane;
-import javafx.scene.paint.Color;
-import javafx.scene.text.Text;
 import fr.cpe.engine.GameManager;
 import fr.cpe.engine.InputService;
+import jakarta.inject.Inject;
+import javafx.geometry.Pos;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Pane;
+import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
+import javafx.scene.text.Text;
 
-/**
- * Service de jeu — gère l'état du jeu et ses éléments visuels.
- *
- * <h2>C'est ici que vous codez votre jeu !</h2>
- *
- * <p>Ce fichier est un <strong>exemple</strong> : une balle qui rebondit.
- * Remplacez tout par votre propre logique.</p>
- *
- * <h2>Méthodes importantes :</h2>
- * <ul>
- *   <li>{@code init(gamePane)} — appelé une fois au démarrage, créez vos Nodes ici</li>
- *   <li>{@code update(width, height)} — appelé ~60x/sec, mettez à jour la logique et les positions ici</li>
- * </ul>
- *
- * <h2>Rendu (Scene Graph) :</h2>
- * <p>Pas besoin de méthode render() ! Vous créez des Nodes JavaFX (Circle, Rectangle,
- * Text, ImageView…) dans {@code init()}, vous les ajoutez au {@code gamePane},
- * et JavaFX les affiche automatiquement. Dans {@code update()}, vous mettez à jour
- * leurs positions.</p>
- *
- * <h2>Clics souris :</h2>
- * <p>Chaque Node gère ses propres clics :</p>
- * <pre>
- *   monCercle.setOnMouseClicked(e -&gt; {
- *       // ce cercle a été cliqué !
- *   });
- * </pre>
- *
- * <h2>Comment ajouter des dépendances :</h2>
- * <p>Ajoutez-les en paramètre du constructeur avec {@code @Inject} :</p>
- * <pre>
- *   @Inject
- *   public GameService(BallService ball, MonAutreService autre) {
- *       this.ball = ball;
- *       this.autre = autre;
- *   }
- * </pre>
- * <p>Guice les injectera automatiquement.</p>
- */
 public class GameService {
 
     private final InputService inputService;
@@ -71,14 +24,59 @@ public class GameService {
     }
 
     public void init(Pane gamePane) {
-        Text titre = new Text(50, 50, "Duel pour la Terre du Milieu");
-        titre.setFill(Color.BLACK);
+        // Conteneur principal qui organise l'écran en 5 zones
+        BorderPane root = new BorderPane();
+        root.setPrefSize(1280, 720);
 
-        Rectangle carteTest = new Rectangle(50, 75, Color.LIGHTGRAY);
-        carteTest.setX(50);
-        carteTest.setY(80);
+        // 1. EN-TÊTE (Haut)
+        HBox header = new HBox(new Text("DUEL POUR LA TERRE DU MILIEU - CHAPITRE 1"));
+        header.setAlignment(Pos.CENTER);
+        header.setStyle("-fx-background-color: #d3d3d3; -fx-padding: 10px;");
+        root.setTop(header);
 
-        gamePane.getChildren().addAll(titre, carteTest);
+        // 2. JOUEUR 1 (Gauche)
+        VBox joueur1Zone = new VBox(15);
+        joueur1Zone.setStyle("-fx-background-color: #e0f7fa; -fx-padding: 20px;");
+        joueur1Zone.getChildren().addAll(
+            new Text("JOUEUR 1 (Peuples Libres)"),
+            new Text("OR: 0"),
+            new Text("Alliances:"),
+            new Rectangle(60, 20, Color.DARKBLUE), // Placeholder Alliances
+            new Text("Cartes:"),
+            new Rectangle(80, 120, Color.LIGHTBLUE) // Placeholder Tableau de cartes
+        );
+        root.setLeft(joueur1Zone);
+
+        // 3. JOUEUR 2 (Droite)
+        VBox joueur2Zone = new VBox(15);
+        joueur2Zone.setStyle("-fx-background-color: #ffebee; -fx-padding: 20px;");
+        joueur2Zone.getChildren().addAll(
+            new Text("JOUEUR 2 (Sauron)"),
+            new Text("OR: 0"),
+            new Text("Alliances:"),
+            new Rectangle(60, 20, Color.DARKRED), // Placeholder Alliances
+            new Text("Cartes:"),
+            new Rectangle(80, 120, Color.LIGHTCORAL) // Placeholder Tableau de cartes
+        );
+        root.setRight(joueur2Zone);
+
+        // 4. ZONE CENTRALE (Milieu : Pyramide + Anneau)
+        VBox centreZone = new VBox(30);
+        centreZone.setAlignment(Pos.CENTER);
+        
+        Rectangle pyramidePlaceholder = new Rectangle(500, 300, Color.GRAY);
+        Rectangle anneauPlaceholder = new Rectangle(600, 40, Color.DARKGRAY);
+        
+        centreZone.getChildren().addAll(
+            new Text("ZONE DE DRAFT - PYRAMIDE"),
+            pyramidePlaceholder,
+            new Text("PISTE DE L'ANNEAU (0-12)"),
+            anneauPlaceholder
+        );
+        root.setCenter(centreZone);
+
+        // Ajout du layout complet au Pane du jeu
+        gamePane.getChildren().add(root);
     }
 
     public void update(double width, double height) {
