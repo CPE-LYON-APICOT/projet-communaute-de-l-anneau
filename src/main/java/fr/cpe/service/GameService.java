@@ -16,6 +16,9 @@ import com.google.inject.Inject;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Text;
+import fr.cpe.engine.GameManager;
+import fr.cpe.engine.InputService;
+import javafx.scene.shape.Rectangle;
 
 /**
  * Service de jeu — gère l'état du jeu et ses éléments visuels.
@@ -58,28 +61,26 @@ import javafx.scene.text.Text;
  */
 public class GameService {
 
-    private final BallService ballService;
+    private final InputService inputService;
+    private final GameManager gameManager;
 
     @Inject
-    public GameService(BallService ballService) {
-        this.ballService = ballService;
+    public GameService(InputService inputService, GameManager gameManager) {
+        this.inputService = inputService;
+        this.gameManager = gameManager;
     }
 
-    /**
-     * Initialise les éléments visuels du jeu (appelé une fois au démarrage).
-     */
     public void init(Pane gamePane) {
-        ballService.init(gamePane);
+        Text titre = new Text(50, 50, "Duel pour la Terre du Milieu");
+        titre.setFill(Color.BLACK);
 
-        Text text = new Text(20, 30, "Projet POO — À vous de jouer !");
-        text.setFill(Color.web("#cdd6f4"));
-        gamePane.getChildren().add(text);
+        Rectangle carteTest = new Rectangle(50, 75, Color.LIGHTGRAY);
+        carteTest.setX(50);
+        carteTest.setY(80);
+
+        gamePane.getChildren().addAll(titre, carteTest);
     }
 
-    /**
-     * Met à jour l'état du jeu (appelé à chaque frame).
-     */
     public void update(double width, double height) {
-        ballService.update(width, height);
     }
 }
