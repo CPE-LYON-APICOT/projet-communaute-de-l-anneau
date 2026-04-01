@@ -1,24 +1,45 @@
 package fr.cpe.model;
 
-import java.util.HashSet;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Joueur {
-    
-    private int or = 0;
-    private int positionAnneau = 0;
-    private final Set<String> alliances = new HashSet<>();
+
+    private int or;
+    private final List<String> symbolesAlliance = new ArrayList<>();
+    private final List<Carte> cartes = new ArrayList<>();
 
     public Joueur() {
+        this.or = 0;
     }
 
-    public int getOr() { return or; }
-    public void ajouterOr(int montant) { this.or += montant; }
-    public void depenserOr(int montant) { this.or -= montant; }
+    public int getOr() {
+        return or;
+    }
 
-    public int getPositionAnneau() { return positionAnneau; }
-    public void avancerAnneau(int cases) { this.positionAnneau += cases; }
+    public void ajouterOr(int montant) {
+        this.or += montant;
+    }
 
-    public Set<String> getAlliances() { return alliances; }
-    public void ajouterAlliance(String symbole) { this.alliances.add(symbole); }
+    public void payerOr(int montant) {
+        this.or -= montant;
+    }
+
+    public List<String> getSymbolesAlliance() {
+        return symbolesAlliance;
+    }
+
+    public void ajouterSymboleAlliance(String symbole) {
+        if (symbole != null && !symbole.isEmpty()) {
+            this.symbolesAlliance.add(symbole);
+        }
+    }
+
+    public List<Carte> getCartes() {
+        return cartes;
+    }
+
+    public void ajouterCarte(Carte carte) {
+        this.cartes.add(carte);
+    }
 }
