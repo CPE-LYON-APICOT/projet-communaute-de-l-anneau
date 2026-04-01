@@ -3,6 +3,7 @@ package fr.cpe.engine;
 import fr.cpe.model.Carte;
 import fr.cpe.model.Joueur;
 import fr.cpe.model.Pyramide;
+import fr.cpe.engine.PyramideFactory;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import java.util.ArrayList;
@@ -22,8 +23,7 @@ public class GameManager {
     public GameManager() {
         this.joueur1 = new Joueur();
         this.joueur2 = new Joueur();
-        this.pyramide = new Pyramide();
-        
+        this.pyramide = PyramideFactory.createChapitre1();
         this.victorySpecs.add(new AllianceSpecification());
         this.victorySpecs.add(new RingSpecification());
     }
