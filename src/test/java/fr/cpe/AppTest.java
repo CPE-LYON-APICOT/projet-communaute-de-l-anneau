@@ -1,6 +1,5 @@
 package fr.cpe;
 
-import fr.cpe.model.Ball;
 import javafx.scene.paint.Color;
 import org.junit.jupiter.api.Test;
 
