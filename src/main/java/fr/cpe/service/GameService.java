@@ -106,10 +106,10 @@ public class GameService implements GameObserver {
                 
                 carteVue.getChildren().addAll(fond, nom);
                 
+                // Dans la méthode onGameStateChanged(), remplacer le bloc de clic existant par :
                 if (estLibre) {
                     carteVue.setOnMouseClicked(e -> {
-                        // Pour le test, on dit que c'est toujours le J1 qui achète
-                        gameManager.acheterCarte(carte, gameManager.getJoueur1());
+                        gameManager.acheterCarte(carte);
                     });
                 }
                 

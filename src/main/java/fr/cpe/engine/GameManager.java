@@ -2,6 +2,7 @@ package fr.cpe.engine;
 
 import fr.cpe.model.Carte;
 import fr.cpe.model.Joueur;
+import fr.cpe.model.PisteAnneau;
 import fr.cpe.model.Pyramide;
 import fr.cpe.engine.PyramideFactory;
 import jakarta.inject.Inject;
@@ -14,7 +15,9 @@ public class GameManager {
 
     private final Joueur joueur1;
     private final Joueur joueur2;
+    private Joueur joueurCourant;
     private final Pyramide pyramide;
+    private final PisteAnneau pisteAnneau;
     
     private final List<GameObserver> observers = new ArrayList<>();
     private final List<Specification<GameManager>> victorySpecs = new ArrayList<>();
@@ -23,9 +26,15 @@ public class GameManager {
     public GameManager() {
         this.joueur1 = new Joueur();
         this.joueur2 = new Joueur();
+        this.joueurCourant = this.joueur1;
         this.pyramide = PyramideFactory.createChapitre1();
+        this.pisteAnneau = new PisteAnneau();
         this.victorySpecs.add(new AllianceSpecification());
         this.victorySpecs.add(new RingSpecification());
+    }
+
+    public PisteAnneau getPisteAnneau() {
+        return pisteAnneau;
     }
 
     public Joueur getJoueur1() {
@@ -36,8 +45,16 @@ public class GameManager {
         return joueur2;
     }
 
+    public Joueur getJoueurCourant() {
+        return joueurCourant;
+    }
+
     public Pyramide getPyramide() {
         return pyramide;
+    }
+
+    private void changerTour() {
+        joueurCourant = (joueurCourant == joueur1) ? joueur2 : joueur1;
     }
 
     public void addObserver(GameObserver observer) {
@@ -50,13 +67,26 @@ public class GameManager {
         }
     }
 
-    public void acheterCarte(Carte c, Joueur acheteur) {
-        if (pyramide.estLibre(c)) {
+    public void acheterCarte(Carte c) {
+        if (pyramide.estLibre(c) && joueurCourant.getOr() >= c.getCoutOr()) {
+            joueurCourant.payerOr(c.getCoutOr());
+            joueurCourant.ajouterCarte(c);
+            joueurCourant.ajouterSymboleAlliance(c.getSymboleAlliance());
             pyramide.retirerCarte(c);
             
-            // TODO: Ajouter la logique d'application des effets de la carte au joueur
+            verifierVictoire();
+            changerTour();
+            notifierObservers();
+        }
+    }
+
+    public void defausserCarte(Carte c) {
+        if (pyramide.estLibre(c)) {
+            joueurCourant.ajouterOr(2);
+            pyramide.retirerCarte(c);
             
             verifierVictoire();
+            changerTour();
             notifierObservers();
         }
     }
@@ -69,4 +99,5 @@ public class GameManager {
         }
         return false;
     }
+    
 }
