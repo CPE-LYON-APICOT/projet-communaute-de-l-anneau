@@ -32,4 +32,12 @@ public class PyramideFactory {
 
         return pyramide;
     }
+
+    public static Pyramide createChapitre2() {
+        return new Pyramide(); // TODO: Définir la structure du chapitre 2
+    }
+
+    public static Pyramide createChapitre3() {
+        return new Pyramide(); // TODO: Définir la structure du chapitre 3
+    }
 }

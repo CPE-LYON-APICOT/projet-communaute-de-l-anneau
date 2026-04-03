@@ -34,6 +34,26 @@ public class Pyramide {
         return bloqueurs == null || bloqueurs.isEmpty();
     }
 
+    public List<Carte> getCartesAccessibles() {
+        List<Carte> accessibles = new ArrayList<>();
+        for (Carte c : cartes) {
+            if (estLibre(c)) {
+                accessibles.add(c);
+            }
+        }
+        return accessibles;
+    }
+
+    public List<Carte> getCartesRecouvertes() {
+        List<Carte> recouvertes = new ArrayList<>();
+        for (Carte c : cartes) {
+            if (!estLibre(c)) {
+                recouvertes.add(c);
+            }
+        }
+        return recouvertes;
+    }
+
     public void retirerCarte(Carte c) {
         if (cartes.remove(c)) {
             for (List<Carte> bloqueurs : couvertPar.values()) {
