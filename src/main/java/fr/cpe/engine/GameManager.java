@@ -16,8 +16,10 @@ public class GameManager {
     private final Joueur joueur1;
     private final Joueur joueur2;
     private Joueur joueurCourant;
-    private final Pyramide pyramide;
+    private Pyramide pyramide;
     private final PisteAnneau pisteAnneau;
+    private int chapitreCourant = 1;
+    private boolean partieTerminee = false;
     
     private final List<GameObserver> observers = new ArrayList<>();
     private final List<Specification<GameManager>> victorySpecs = new ArrayList<>();
@@ -68,12 +70,14 @@ public class GameManager {
     }
 
     public void acheterCarte(Carte c) {
+        if (partieTerminee) return;
         if (pyramide.estLibre(c) && joueurCourant.getOr() >= c.getCoutOr()) {
             joueurCourant.payerOr(c.getCoutOr());
             joueurCourant.ajouterCarte(c);
             joueurCourant.ajouterSymboleAlliance(c.getSymboleAlliance());
             pyramide.retirerCarte(c);
             
+            verifierEtChangerChapitre();
             verifierVictoire();
             changerTour();
             notifierObservers();
@@ -81,10 +85,12 @@ public class GameManager {
     }
 
     public void defausserCarte(Carte c) {
+        if (partieTerminee) return;
         if (pyramide.estLibre(c)) {
             joueurCourant.ajouterOr(2);
             pyramide.retirerCarte(c);
             
+            verifierEtChangerChapitre();
             verifierVictoire();
             changerTour();
             notifierObservers();
@@ -92,12 +98,29 @@ public class GameManager {
     }
 
     public boolean verifierVictoire() {
+        if (partieTerminee) {
+            return true;
+        }
         for (Specification<GameManager> spec : victorySpecs) {
             if (spec.isSatisfiedBy(this)) {
                 return true; // Une condition de victoire a été atteinte
             }
         }
         return false;
+    }
+
+    private void verifierEtChangerChapitre() {
+        if (pyramide.getCartes().isEmpty()) {
+            if (chapitreCourant == 1) {
+                chapitreCourant = 2;
+                pyramide = PyramideFactory.createChapitre2();
+            } else if (chapitreCourant == 2) {
+                chapitreCourant = 3;
+                pyramide = PyramideFactory.createChapitre3();
+            } else if (chapitreCourant == 3) {
+                partieTerminee = true;
+            }
+        }
     }
     
 }
