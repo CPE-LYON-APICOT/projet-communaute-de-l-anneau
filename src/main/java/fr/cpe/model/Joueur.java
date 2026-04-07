@@ -9,6 +9,7 @@ public class Joueur {
     private final List<String> symbolesAlliance = new ArrayList<>();
     private final List<Carte> cartes = new ArrayList<>();
     private final List<String> symbolesCompetence = new ArrayList<>();
+    private final List<HautLieu> hautsLieux = new ArrayList<>();
 
     public Joueur() {
         this.or = 0;
@@ -53,5 +54,18 @@ public class Joueur {
     public long compterSymboleCompetence(String symbole) {
         if (symbole == null || symbole.isEmpty()) return 0;
         return this.symbolesCompetence.stream().filter(s -> s.equals(symbole)).count();
+    }
+
+    public long compterSymboleAlliance(String symbole) {
+        if (symbole == null || symbole.isEmpty()) return 0;
+        return this.symbolesAlliance.stream().filter(s -> s.equals(symbole)).count();
+    }
+
+    public void ajouterHautLieu(HautLieu hl) {
+        this.hautsLieux.add(hl);
+    }
+    
+    public List<HautLieu> getHautsLieux() {
+        return hautsLieux;
     }
 }
