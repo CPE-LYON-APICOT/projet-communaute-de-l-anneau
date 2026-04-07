@@ -4,6 +4,7 @@ import fr.cpe.model.Carte;
 import fr.cpe.model.Joueur;
 import fr.cpe.model.PisteAnneau;
 import fr.cpe.model.Pyramide;
+import fr.cpe.model.HautLieu;
 import fr.cpe.engine.PyramideFactory;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -23,6 +24,7 @@ public class GameManager {
     
     private final List<GameObserver> observers = new ArrayList<>();
     private final List<Specification<GameManager>> victorySpecs = new ArrayList<>();
+    private final List<HautLieu> hautsLieuxDisponibles = new ArrayList<>();
 
     @Inject
     public GameManager() {
@@ -33,6 +35,10 @@ public class GameManager {
         this.pisteAnneau = new PisteAnneau();
         this.victorySpecs.add(new AllianceSpecification());
         this.victorySpecs.add(new RingSpecification());
+        this.hautsLieuxDisponibles.add(new HautLieu("Haut-Lieu 1", 2, 1, "Effet 1"));
+        this.hautsLieuxDisponibles.add(new HautLieu("Haut-Lieu 2", 3, 2, "Effet 2"));
+        this.hautsLieuxDisponibles.add(new HautLieu("Haut-Lieu 3", 4, 3, "Effet 3"));
+        this.hautsLieuxDisponibles.add(new HautLieu("Haut-Lieu 4", 5, 4, "Effet 4"));
     }
 
     public PisteAnneau getPisteAnneau() {
@@ -96,6 +102,22 @@ public class GameManager {
             pyramide.retirerCarte(c);
             
             verifierEtChangerChapitre();
+            verifierVictoire();
+            changerTour();
+            notifierObservers();
+        }
+    }
+
+    public void reclamerHautLieu(HautLieu hl) {
+        if (partieTerminee || !hautsLieuxDisponibles.contains(hl)) return;
+        
+        long nbForteresses = joueurCourant.compterSymboleAlliance("Forteresse");
+        
+        if (joueurCourant.getOr() >= hl.getCoutOr() && nbForteresses >= hl.getCoutForteresses()) {
+            joueurCourant.payerOr(hl.getCoutOr());
+            joueurCourant.ajouterHautLieu(hl);
+            hautsLieuxDisponibles.remove(hl);
+            
             verifierVictoire();
             changerTour();
             notifierObservers();
