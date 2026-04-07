@@ -1,0 +1,11 @@
+commit 97956ad67c9b7abb5205663dced5acbd88859b0a
+Author: Tristan <t.roux@cpe.fr>
+Date:   Tue Apr 7 10:44:26 2026 +0200
+
+    feat: implémentation des compétences (cartes grises)
+
+commit c772aa4839ce82d0e0eca57d3e4b292f74cd84bd
+Author: Tristan <t.roux@cpe.fr>
+Date:   Fri Apr 3 13:57:24 2026 +0200
+
+    feat: gestion de l'état des cartes de la pyramide et enchaînement des chapitres
