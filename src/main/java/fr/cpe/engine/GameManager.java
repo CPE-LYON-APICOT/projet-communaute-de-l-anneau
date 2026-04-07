@@ -71,10 +71,15 @@ public class GameManager {
 
     public void acheterCarte(Carte c) {
         if (partieTerminee) return;
-        if (pyramide.estLibre(c) && joueurCourant.getOr() >= c.getCoutOr()) {
-            joueurCourant.payerOr(c.getCoutOr());
+        
+        int reduction = (int) joueurCourant.compterSymboleCompetence(c.getSymboleRequis());
+        int coutFinal = Math.max(0, c.getCoutOr() - reduction);
+
+        if (pyramide.estLibre(c) && joueurCourant.getOr() >= coutFinal) {
+            joueurCourant.payerOr(coutFinal);
             joueurCourant.ajouterCarte(c);
             joueurCourant.ajouterSymboleAlliance(c.getSymboleAlliance());
+            joueurCourant.ajouterSymboleCompetence(c.getSymboleCompetence());
             pyramide.retirerCarte(c);
             
             verifierEtChangerChapitre();
