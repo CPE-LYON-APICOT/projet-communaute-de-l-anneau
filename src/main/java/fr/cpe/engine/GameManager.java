@@ -21,6 +21,7 @@ public class GameManager {
     private final PisteAnneau pisteAnneau;
     private int chapitreCourant = 1;
     private boolean partieTerminee = false;
+    private String vainqueurFinal = null;
     
     private final List<GameObserver> observers = new ArrayList<>();
     private final List<Specification<GameManager>> victorySpecs = new ArrayList<>();
@@ -59,6 +60,10 @@ public class GameManager {
 
     public Pyramide getPyramide() {
         return pyramide;
+    }
+
+    public String getVainqueurFinal() {
+        return vainqueurFinal;
     }
 
     private void changerTour() {
@@ -130,6 +135,8 @@ public class GameManager {
         }
         for (Specification<GameManager> spec : victorySpecs) {
             if (spec.isSatisfiedBy(this)) {
+                partieTerminee = true;
+                vainqueurFinal = (joueurCourant == joueur1) ? "Joueur 1 (Communauté)" : "Joueur 2 (Sauron)";
                 return true; // Une condition de victoire a été atteinte
             }
         }
@@ -145,7 +152,18 @@ public class GameManager {
                 chapitreCourant = 3;
                 pyramide = PyramideFactory.createChapitre3();
             } else if (chapitreCourant == 3) {
-                partieTerminee = true;
+                if (!verifierVictoire()) {
+                    partieTerminee = true;
+                    int posCom = pisteAnneau.getPositionCommunaute();
+                    int posNaz = pisteAnneau.getPositionNazguls();
+                    if (posCom > posNaz) {
+                        vainqueurFinal = "Joueur 1 (Communauté)";
+                    } else if (posNaz > posCom) {
+                        vainqueurFinal = "Joueur 2 (Sauron)";
+                    } else {
+                        vainqueurFinal = "Égalité";
+                    }
+                }
             }
         }
     }
