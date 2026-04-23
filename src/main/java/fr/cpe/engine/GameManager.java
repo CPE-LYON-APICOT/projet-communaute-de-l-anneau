@@ -66,6 +66,18 @@ public class GameManager {
         return vainqueurFinal;
     }
 
+    public List<HautLieu> getHautsLieuxDisponibles() {
+        return hautsLieuxDisponibles;
+    }
+
+    public int getChapitreCourant() {
+        return chapitreCourant;
+    }
+
+    public boolean estPartieTerminee() {
+        return partieTerminee;
+    }
+
     private void changerTour() {
         joueurCourant = (joueurCourant == joueur1) ? joueur2 : joueur1;
     }
@@ -92,7 +104,18 @@ public class GameManager {
             joueurCourant.ajouterSymboleAlliance(c.getSymboleAlliance());
             joueurCourant.ajouterSymboleCompetence(c.getSymboleCompetence());
             pyramide.retirerCarte(c);
-            
+
+            // Avance sur la Piste de l'Anneau :
+            // J1 = Communauté (avance vers la fin), J2 = Sauron/Nazguls (rattrape).
+            int avance = c.getAvanceAnneau();
+            if (avance > 0) {
+                if (joueurCourant == joueur1) {
+                    pisteAnneau.avancerCommunaute(avance);
+                } else {
+                    pisteAnneau.avancerNazguls(avance);
+                }
+            }
+
             verifierEtChangerChapitre();
             verifierVictoire();
             changerTour();
