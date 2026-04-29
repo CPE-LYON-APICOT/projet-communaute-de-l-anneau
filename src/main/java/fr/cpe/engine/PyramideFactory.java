@@ -2,85 +2,130 @@ package fr.cpe.engine;
 
 import fr.cpe.model.Carte;
 import fr.cpe.model.Pyramide;
-import java.util.Arrays;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+/**
+ * Construit la pyramide complete d'un chapitre, en utilisant TOUTES les cartes
+ * scannees disponibles (carte_C_NN.png).
+ *
+ * Structure (sens "base = libre, sommet = couvert", convention du code initial) :
+ *  - Chapitre 1 : 20 cartes en 6-5-4-3-2  (6 cartes a la base, 2 au sommet)
+ *  - Chapitre 2 : 15 cartes en 5-4-3-2-1
+ *  - Chapitre 3 : 20 cartes en 6-5-4-3-2
+ *
+ * Couvrement :
+ *  - Carte de la ligne r (taille T_r) est COUVERTE par les 2 cartes de la ligne
+ *    r-1 (taille T_{r-1}) immediatement en-dessous d'elle, soit [r-1][c] et
+ *    [r-1][c+1] (la ligne du dessous est plus large).
+ *  - Quand les 2 cartes du dessous sont prises, la carte du dessus devient libre.
+ *
+ * Les attributs de jeu (couleur, alliance, competence, avance Anneau) sont
+ * generes selon une rotation pour avoir de la diversite. Pour un equilibrage
+ * fidele du jeu original, il faudrait les renseigner carte par carte.
+ */
 public class PyramideFactory {
 
-    // =========================================================================
-    // CHAPITRE 1 - Fondations : cartes bon marché, peu de Forteresse, 1 avance
-    // =========================================================================
+    private static final String[] COULEURS    = {"Jaune", "Gris", "Vert", "Rouge", "Bleu"};
+    private static final String[] ALLIANCES   = {"Hobbits", "Elves", "Dwarves", "Ents", "Gondor", "Rohan"};
+    private static final String[] COMPETENCES = {"Nourriture", "Bois", "Pierre", "Acier", "Magie"};
+
     public static Pyramide createChapitre1() {
-        Pyramide pyramide = new Pyramide();
-
-        // Ligne 1 (base - libres) : cartes à 0 or, compétences de base
-        Carte c1 = new Carte("Ferme de la Comté", "Jaune", 0, "Hobbits", "Nourriture", null, 0);
-        Carte c2 = new Carte("Mine de Moria",     "Gris",  0, "Dwarves", "Pierre",    null, 0);
-        Carte c3 = new Carte("Clairière",         "Vert",  0, "Ents",    "Bois",      null, 0);
-
-        // Ligne 2 (couverte par ligne 1) : demandent une ressource
-        Carte c4 = new Carte("Caserne d'Osgiliath", "Rouge", 2, "Forteresse", null,    null,   1);
-        Carte c5 = new Carte("Temple de Fondcombe", "Bleu",  1, "Elves",      "Magie", "Bois", 0);
-
-        // Ligne 3 (sommet)
-        Carte c6 = new Carte("Cité de Bree",        "Bleu",  2, "Rohan",      null,    "Pierre", 0);
-
-        pyramide.ajouterCarte(c1, null);
-        pyramide.ajouterCarte(c2, null);
-        pyramide.ajouterCarte(c3, null);
-        pyramide.ajouterCarte(c4, Arrays.asList(c1, c2));
-        pyramide.ajouterCarte(c5, Arrays.asList(c2, c3));
-        pyramide.ajouterCarte(c6, Arrays.asList(c4, c5));
-
-        return pyramide;
+        return creerPyramide(1, new int[]{6, 5, 4, 3, 2});
     }
 
-    // =========================================================================
-    // CHAPITRE 2 - Alliances : cartes plus chères, 2 Forteresse, +3 anneau
-    // =========================================================================
     public static Pyramide createChapitre2() {
+        return creerPyramide(2, new int[]{5, 4, 3, 2, 1});
+    }
+
+    public static Pyramide createChapitre3() {
+        return creerPyramide(3, new int[]{6, 5, 4, 3, 2});
+    }
+
+    /**
+     * Construit une pyramide pour un chapitre donne avec une structure de lignes.
+     * tailleParLigne[0] = nb cartes a la BASE (libres), tailleParLigne[N-1] = SOMMET.
+     */
+    private static Pyramide creerPyramide(int chapitre, int[] tailleParLigne) {
         Pyramide pyramide = new Pyramide();
+        Carte[][] grille = new Carte[tailleParLigne.length][];
+        int idx = 0;
 
-        Carte c1 = new Carte("Grenier de Bree",   "Jaune", 1, "Hobbits",    "Nourriture", null,      0);
-        Carte c2 = new Carte("Forge Naine",       "Gris",  1, "Dwarves",    "Acier",      "Pierre",  0);
-        Carte c3 = new Carte("Scriptorium elfe",  "Vert",  2, "Elves",      "Magie",      "Bois",    0);
+        // 1. Creation des cartes
+        for (int r = 0; r < tailleParLigne.length; r++) {
+            grille[r] = new Carte[tailleParLigne[r]];
+            for (int c = 0; c < tailleParLigne[r]; c++) {
+                grille[r][c] = creerCarte(chapitre, idx + 1, r);
+                idx++;
+            }
+        }
 
-        Carte c4 = new Carte("Garnison du Gondor","Rouge", 3, "Forteresse", null,         "Acier",   1);
-        Carte c5 = new Carte("Tour de Garde",     "Rouge", 3, "Forteresse", null,         "Acier",   2);
+        // 2. Ajout dans la pyramide avec relations couvertPar
+        //    Carte [r][c] (r > 0) est COUVERTE par [r-1][c] et [r-1][c+1] (ligne du dessous, plus large)
+        for (int r = 0; r < tailleParLigne.length; r++) {
+            for (int c = 0; c < tailleParLigne[r]; c++) {
+                List<Carte> bloqueurs = new ArrayList<>();
+                if (r > 0) {
+                    bloqueurs.add(grille[r - 1][c]);
+                    if (c + 1 < tailleParLigne[r - 1]) {
+                        bloqueurs.add(grille[r - 1][c + 1]);
+                    }
+                }
+                pyramide.ajouterCarte(grille[r][c], bloqueurs.isEmpty() ? null : bloqueurs);
+            }
+        }
 
-        Carte c6 = new Carte("Palais Royal",      "Bleu",  4, "Gondor",     null,         "Magie",   0);
-
-        pyramide.ajouterCarte(c1, null);
-        pyramide.ajouterCarte(c2, null);
-        pyramide.ajouterCarte(c3, null);
-        pyramide.ajouterCarte(c4, Arrays.asList(c1, c2));
-        pyramide.ajouterCarte(c5, Arrays.asList(c2, c3));
-        pyramide.ajouterCarte(c6, Arrays.asList(c4, c5));
+        // 3. Memorise la structure pour l'affichage en GameService
+        List<List<Carte>> lignesAsList = new ArrayList<>();
+        for (Carte[] ligne : grille) {
+            lignesAsList.add(Arrays.asList(ligne));
+        }
+        pyramide.definirLignes(lignesAsList);
 
         return pyramide;
     }
 
-    // =========================================================================
-    // CHAPITRE 3 - Grandes œuvres : cartes puissantes, 2 Forteresse, +5 anneau
-    // =========================================================================
-    public static Pyramide createChapitre3() {
-        Pyramide pyramide = new Pyramide();
+    /** Genere les attributs d'une carte selon sa position dans la pyramide. */
+    private static Carte creerCarte(int chapitre, int numero, int ligne) {
+        String chemin = String.format("carte_%d_%02d", chapitre, numero);
 
-        Carte c1 = new Carte("Forêt de Fangorn",   "Vert",  3, "Ents",       "Bois",   "Nourriture", 0);
-        Carte c2 = new Carte("Khazad-dûm",         "Gris",  4, "Dwarves",    "Acier",  "Pierre",     0);
-        Carte c3 = new Carte("Caserne du Rohan",   "Rouge", 4, "Forteresse", null,     "Acier",      2);
+        // Couleur cyclique pour varier la palette
+        String couleur = COULEURS[(numero - 1) % COULEURS.length];
 
-        Carte c4 = new Carte("Tour de Mordor",     "Rouge", 5, "Forteresse", null,     "Magie",      3);
-        Carte c5 = new Carte("Fondcombe",          "Bleu",  5, "Elves",      "Magie",  "Bois",       0);
+        // Alliance : meme cycle, plus "Forteresse" sur les rouges (cartes-Anneau)
+        String alliance;
+        if ("Rouge".equals(couleur)) {
+            alliance = "Forteresse";
+        } else {
+            alliance = ALLIANCES[(numero - 1) % ALLIANCES.length];
+        }
 
-        Carte c6 = new Carte("Minas Tirith",       "Bleu",  5, "Gondor",     null,     "Pierre",     0);
+        // Cout : cartes du bas (ligne 0) gratuites, augmente vers le sommet
+        int cout = ligne * (chapitre);
+        if ("Jaune".equals(couleur)) cout = 0; // les jaunes sont gratuites (or)
 
-        pyramide.ajouterCarte(c1, null);
-        pyramide.ajouterCarte(c2, null);
-        pyramide.ajouterCarte(c3, null);
-        pyramide.ajouterCarte(c4, Arrays.asList(c1, c2));
-        pyramide.ajouterCarte(c5, Arrays.asList(c2, c3));
-        pyramide.ajouterCarte(c6, Arrays.asList(c4, c5));
+        // Competence : seulement sur les jaunes/gris/verts (cartes ressources)
+        String competence = null;
+        if ("Jaune".equals(couleur) || "Gris".equals(couleur) || "Vert".equals(couleur)) {
+            competence = COMPETENCES[(numero - 1) % COMPETENCES.length];
+        }
 
-        return pyramide;
+        // Symbole requis pour reduction (jamais sur le bas, parfois sur les autres)
+        String requis = null;
+        if (ligne >= 2 && (numero % 3 == 0)) {
+            requis = COMPETENCES[(numero) % COMPETENCES.length];
+        }
+
+        // Avance Anneau : sur les rouges et certaines bleues
+        int avanceAnneau = 0;
+        if ("Rouge".equals(couleur)) {
+            avanceAnneau = chapitre; // ch1=+1, ch2=+2, ch3=+3
+        } else if ("Bleu".equals(couleur) && numero % 4 == 0) {
+            avanceAnneau = 1;
+        }
+
+        return new Carte(chemin, couleur, cout, alliance, competence, requis, avanceAnneau, chemin);
     }
 }
