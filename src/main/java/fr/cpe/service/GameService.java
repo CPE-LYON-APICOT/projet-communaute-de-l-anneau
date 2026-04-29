@@ -8,6 +8,8 @@ import fr.cpe.model.Joueur;
 import jakarta.inject.Inject;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
@@ -17,6 +19,8 @@ import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.scene.shape.Rectangle;
+import java.util.HashMap;
+import java.util.Map;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
@@ -171,59 +175,154 @@ public class GameService implements GameObserver {
 
     private void mettreAJourPyramide() {
         pyramideBox.getChildren().clear();
-        HBox ligne = new HBox(10);
-        ligne.setAlignment(Pos.CENTER);
-        for (Carte carte : gameManager.getPyramide().getCartesAccessibles()) {
-            ligne.getChildren().add(construireVignetteCarte(carte, true));
-        }
-        pyramideBox.getChildren().add(ligne);
 
-        // Les cartes couvertes sont affichées grisées au-dessous pour indiquer
-        // ce qui arrive, sans être cliquables.
-        if (!gameManager.getPyramide().getCartesRecouvertes().isEmpty()) {
-            HBox ligneCouvertes = new HBox(6);
-            ligneCouvertes.setAlignment(Pos.CENTER);
-            for (Carte carte : gameManager.getPyramide().getCartesRecouvertes()) {
-                ligneCouvertes.getChildren().add(construireVignetteCarte(carte, false));
+        java.util.List<java.util.List<Carte>> lignes = gameManager.getPyramide().getLignes();
+
+        // Fallback si la structure n'est pas definie (tests, etc.)
+        if (lignes == null || lignes.isEmpty()) {
+            HBox ligne = new HBox(10);
+            ligne.setAlignment(Pos.CENTER);
+            for (Carte carte : gameManager.getPyramide().getCartesAccessibles()) {
+                ligne.getChildren().add(construireVignetteCarte(carte, true));
             }
-            pyramideBox.getChildren().add(new Text("(Couvertes)"));
-            pyramideBox.getChildren().add(ligneCouvertes);
+            pyramideBox.getChildren().add(ligne);
+            return;
+        }
+
+        // Affichage de la pyramide visuelle : sommet en haut, base en bas.
+        // Les lignes sont stockees dans l'ordre [base, ..., sommet] -> on parcourt en sens inverse.
+        Image dos = chargerImageDosChapitre(gameManager.getChapitreCourant());
+        java.util.List<Carte> presentes = gameManager.getPyramide().getCartes();
+
+        for (int r = lignes.size() - 1; r >= 0; r--) {
+            HBox ligneBox = new HBox(6);
+            ligneBox.setAlignment(Pos.CENTER);
+            for (Carte carte : lignes.get(r)) {
+                if (!presentes.contains(carte)) {
+                    // Carte deja prise : espace vide pour preserver la pyramide
+                    ligneBox.getChildren().add(construireVignetteVide());
+                } else if (gameManager.getPyramide().estLibre(carte)) {
+                    ligneBox.getChildren().add(construireVignetteCarte(carte, true));
+                } else {
+                    // Couverte : afficher le dos du chapitre
+                    ligneBox.getChildren().add(construireVignetteDos(dos));
+                }
+            }
+            pyramideBox.getChildren().add(ligneBox);
         }
     }
+
+    private StackPane construireVignetteDos(Image dos) {
+        StackPane pane = new StackPane();
+        double w = TAILLE_VIGNETTE_W, h = TAILLE_VIGNETTE_H;
+        if (dos != null) {
+            ImageView iv = new ImageView(dos);
+            iv.setFitWidth(w);
+            iv.setFitHeight(h);
+            iv.setPreserveRatio(true);
+            iv.setSmooth(true);
+            pane.getChildren().add(iv);
+        } else {
+            Rectangle rect = new Rectangle(w, h);
+            rect.setFill(Color.DARKGOLDENROD);
+            rect.setStroke(Color.BLACK);
+            Text t = new Text("?");
+            t.setFill(Color.WHITE);
+            t.setFont(Font.font("System", FontWeight.BOLD, 28));
+            pane.getChildren().addAll(rect, t);
+        }
+        return pane;
+    }
+
+    private StackPane construireVignetteVide() {
+        StackPane pane = new StackPane();
+        Rectangle rect = new Rectangle(TAILLE_VIGNETTE_W, TAILLE_VIGNETTE_H);
+        rect.setFill(Color.TRANSPARENT);
+        pane.getChildren().add(rect);
+        return pane;
+    }
+
+    private Image chargerImageDosChapitre(int chapitre) {
+        String key = "dos_carte_chapitre_" + chapitre;
+        if (cacheImages.containsKey(key)) return cacheImages.get(key);
+        Image img = null;
+        java.io.InputStream in = getClass().getResourceAsStream("/objets/" + key + ".png");
+        if (in != null) {
+            try {
+                img = new Image(in);
+                if (img.isError()) img = null;
+            } catch (Exception e) {
+                img = null;
+            }
+        }
+        cacheImages.put(key, img);
+        return img;
+    }
+
+    private static final double TAILLE_VIGNETTE_W = 75;
+    private static final double TAILLE_VIGNETTE_H = 105;
 
     private StackPane construireVignetteCarte(Carte carte, boolean cliquable) {
         StackPane pane = new StackPane();
 
-        double w = cliquable ? 110 : 70;
-        double h = cliquable ? 150 : 90;
-        Rectangle rect = new Rectangle(w, h);
-        Color fond = couleurDe(carte.getCouleur());
-        if (!cliquable) {
-            // Griser les cartes couvertes
-            fond = fond.deriveColor(0, 0.3, 1, 0.6);
-        }
-        rect.setFill(fond);
-        rect.setStroke(Color.BLACK);
+        // Cartes en portrait apres rotation : ratio ~0.68
+        double w = TAILLE_VIGNETTE_W;
+        double h = TAILLE_VIGNETTE_H;
 
-        StringBuilder label = new StringBuilder(carte.getNom());
-        label.append("\nCoût: ").append(carte.getCoutOr());
-        if (carte.getSymboleRequis() != null) {
-            label.append(" (").append(carte.getSymboleRequis()).append(")");
-        }
-        if (carte.getSymboleAlliance() != null && !carte.getSymboleAlliance().isEmpty()) {
-            label.append("\n⚑ ").append(carte.getSymboleAlliance());
-        }
-        if (carte.getSymboleCompetence() != null) {
-            label.append("\n◆ ").append(carte.getSymboleCompetence());
-        }
-        if (carte.getAvanceAnneau() > 0) {
-            label.append("\n↯ Anneau +").append(carte.getAvanceAnneau());
-        }
-        Text text = new Text(label.toString());
-        text.setTextAlignment(TextAlignment.CENTER);
-        text.setFont(Font.font("System", cliquable ? 11 : 9));
+        Image img = chargerImageCarte(carte);
+        if (img != null) {
+            // Affichage de l'image scannee
+            ImageView iv = new ImageView(img);
+            iv.setFitWidth(w);
+            iv.setFitHeight(h);
+            iv.setPreserveRatio(true);
+            iv.setSmooth(true);
+            if (!cliquable) {
+                iv.setOpacity(0.5);
+            }
+            pane.getChildren().add(iv);
+        } else {
+            // Fallback : rectangle colore + texte (carte sans image)
+            Rectangle rect = new Rectangle(w, h);
+            Color fond = couleurDe(carte.getCouleur());
+            if (!cliquable) {
+                fond = fond.deriveColor(0, 0.3, 1, 0.6);
+            }
+            rect.setFill(fond);
+            rect.setStroke(Color.BLACK);
 
-        pane.getChildren().addAll(rect, text);
+            StringBuilder label = new StringBuilder(carte.getNom());
+            label.append("\nCoût: ").append(carte.getCoutOr());
+            if (carte.getSymboleRequis() != null) {
+                label.append(" (").append(carte.getSymboleRequis()).append(")");
+            }
+            if (carte.getSymboleAlliance() != null && !carte.getSymboleAlliance().isEmpty()) {
+                label.append("\n⚑ ").append(carte.getSymboleAlliance());
+            }
+            if (carte.getSymboleCompetence() != null) {
+                label.append("\n◆ ").append(carte.getSymboleCompetence());
+            }
+            if (carte.getAvanceAnneau() > 0) {
+                label.append("\n↯ Anneau +").append(carte.getAvanceAnneau());
+            }
+            Text text = new Text(label.toString());
+            text.setTextAlignment(TextAlignment.CENTER);
+            text.setFont(Font.font("System", cliquable ? 11 : 9));
+
+            pane.getChildren().addAll(rect, text);
+        }
+
+        // Affichage du cout en surimpression sur l'image (toujours visible)
+        if (img != null) {
+            Text coutText = new Text(String.valueOf(carte.getCoutOr()));
+            coutText.setFont(Font.font("System", FontWeight.BOLD, 16));
+            coutText.setFill(Color.WHITE);
+            coutText.setStroke(Color.BLACK);
+            coutText.setStrokeWidth(0.8);
+            StackPane.setAlignment(coutText, Pos.TOP_LEFT);
+            StackPane.setMargin(coutText, new Insets(4));
+            pane.getChildren().add(coutText);
+        }
 
         if (cliquable) {
             pane.setOnMouseClicked(e -> {
@@ -235,6 +334,33 @@ public class GameService implements GameObserver {
             });
         }
         return pane;
+    }
+
+    /** Cache des images deja chargees (evite de relire le PNG a chaque rafraichissement). */
+    private final Map<String, Image> cacheImages = new HashMap<>();
+
+    /**
+     * Charge l'image d'une carte depuis /cartes/{cheminImage}.png.
+     * Retourne null si la carte n'a pas de cheminImage ou si le fichier est absent
+     * (auquel cas le code appelant retombera sur le rectangle colore).
+     */
+    private Image chargerImageCarte(Carte carte) {
+        String chemin = carte.getCheminImage();
+        if (chemin == null || chemin.isEmpty()) return null;
+        if (cacheImages.containsKey(chemin)) return cacheImages.get(chemin);
+
+        Image img = null;
+        java.io.InputStream in = getClass().getResourceAsStream("/cartes/" + chemin + ".png");
+        if (in != null) {
+            try {
+                img = new Image(in);
+                if (img.isError()) img = null;
+            } catch (Exception e) {
+                img = null;
+            }
+        }
+        cacheImages.put(chemin, img); // null aussi mis en cache pour eviter re-essais
+        return img;
     }
 
     private void mettreAJourInventaires() {
