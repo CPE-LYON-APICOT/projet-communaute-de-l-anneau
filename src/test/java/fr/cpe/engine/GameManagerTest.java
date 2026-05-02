@@ -37,8 +37,10 @@ class GameManagerTest {
         assertEquals(1, gm.getChapitreCourant());
         assertFalse(gm.estPartieTerminee());
         assertEquals(4, gm.getHautsLieuxDisponibles().size());
-        assertEquals(0, gm.getPisteAnneau().getPositionCommunaute());
-        assertEquals(0, gm.getPisteAnneau().getPositionNazguls());
+        assertEquals(5, gm.getPisteAnneau().getPositionCommunaute(),
+                "La Communaute demarre en case 5 (Comte/Bree)");
+        assertEquals(0, gm.getPisteAnneau().getPositionNazguls(),
+                "Les Nazguls demarrent en case 0");
         assertFalse(gm.getPyramide().getCartes().isEmpty(), "Chapitre 1 pre-rempli");
     }
 
@@ -59,39 +61,62 @@ class GameManagerTest {
     @Test
     void acheterCarte_paieLeCoutEnOr() {
         // On achete une carte couteuse : il faut donner de l'or au joueur courant.
-        Carte cible = carteParCout(2);
-        assertNotNull(cible, "Il existe une carte a cout 2 dans la pyramide");
+        // Le chapitre 1 contient des cartes a cout 1 (ex: carte_1_17 bleu).
+        Carte cible = carteParCout(1);
+        assertNotNull(cible, "Le chapitre 1 contient au moins une carte a cout 1");
 
         gm.getJoueur1().ajouterOr(5);
-        // Libere la carte cible en retirant ses eventuels bloqueurs
         libererCarte(cible);
 
+        // Le joueur ne possede aucune des ressources requises -> penalite eventuelle.
+        int penalite = cible.getSymbolesRequis().size();
         gm.acheterCarte(cible);
 
-        assertEquals(5 - 2, gm.getJoueur1().getOr(), "or debite du cout");
+        assertEquals(5 - 1 - penalite, gm.getJoueur1().getOr(),
+                "or debite = coutOr + 1 par ressource manquante");
     }
 
     @Test
-    void acheterCarte_reductionParSymboleRequis() {
-        // On cible une carte avec symboleRequis. On donne au J1 assez d'instances
-        // de ce symbole pour absorber tout le cout -> or inchange apres achat.
+    void acheterCarte_penaliteRessourcesManquantes() {
         Carte cible = carteAvecRequisNonNull();
         assertNotNull(cible, "Chapitre 1 contient au moins une carte avec symboleRequis");
 
-        String requis = cible.getSymboleRequis();
         Joueur j1 = gm.getJoueur1();
-        // Accumule suffisamment de competences pour reduire a zero.
-        for (int i = 0; i < cible.getCoutOr(); i++) {
-            j1.ajouterSymboleCompetence(requis);
-        }
-
+        j1.ajouterOr(10); // Assez d'or pour tout payer
         libererCarte(cible);
+
+        int orAvant = j1.getOr();
+        int ressourcesRequises = cible.getSymbolesRequis().size();
+        
+        gm.acheterCarte(cible);
+
+        // Le joueur n'avait aucune des ressources requises.
+        // Il doit donc payer coutOr + (1 * ressourcesRequises)
+        int coutAttendu = cible.getCoutOr() + ressourcesRequises;
+        assertEquals(orAvant - coutAttendu, j1.getOr(),
+                "cout final = coutOr + 1 or par ressource manquante");
+        assertTrue(j1.getCartes().contains(cible));
+    }
+
+    @Test
+    void acheterCarte_sansPenaliteSiRessourcesPossedees() {
+        Carte cible = carteAvecRequisNonNull();
+        assertNotNull(cible, "Chapitre 1 contient au moins une carte avec symboleRequis");
+
+        Joueur j1 = gm.getJoueur1();
+        j1.ajouterOr(10);
+        // Ajout des ressources pour eviter la penalite
+        for (String req : cible.getSymbolesRequis()) {
+            j1.ajouterSymboleCompetence(req);
+        }
+        libererCarte(cible);
+
         int orAvant = j1.getOr();
         gm.acheterCarte(cible);
 
-        assertEquals(orAvant, j1.getOr(),
-                "reduction = cout => coutFinal=0, or inchange");
-        assertTrue(j1.getCartes().contains(cible));
+        // Pas de pénalité, paie juste le coutOr de base
+        assertEquals(orAvant - cible.getCoutOr(), j1.getOr(),
+                "cout final = coutOr (pas de penalite)");
     }
 
     @Test
@@ -118,7 +143,8 @@ class GameManagerTest {
 
         gm.acheterCarte(avecAvance);
 
-        assertEquals(avance, gm.getPisteAnneau().getPositionCommunaute());
+        // Communaute partait de 5, donc nouvelle position = 5 + avance.
+        assertEquals(5 + avance, gm.getPisteAnneau().getPositionCommunaute());
         assertEquals(0, gm.getPisteAnneau().getPositionNazguls());
     }
 
@@ -137,8 +163,12 @@ class GameManagerTest {
 
         gm.acheterCarte(avecAvance);
 
+        // Verification : si l'avance > 5, les Nazguls atteignent la position de la Communaute (5)
+        // -> RingSpecification declenche la victoire de Sauron, et la partie peut s'arreter.
+        // On verifie juste que la position des Nazguls a bien augmente.
         assertEquals(avance, gm.getPisteAnneau().getPositionNazguls());
-        assertEquals(0, gm.getPisteAnneau().getPositionCommunaute());
+        assertEquals(5, gm.getPisteAnneau().getPositionCommunaute(),
+                "La Communaute n'a pas bouge depuis sa position initiale");
     }
 
     // --------- Hauts-Lieux ---------
@@ -157,16 +187,21 @@ class GameManagerTest {
     }
 
     @Test
-    void reclamerHautLieu_reussitAvecConditions() {
-        HautLieu hl = gm.getHautsLieuxDisponibles().get(0); // cout 2 or, 1 forteresse
+    void reclamerHautLieu_estDesactive() {
+        // Le mecanisme d'alliance ayant ete retire, les Hauts-Lieux ne sont
+        // plus jamais reclamables (les cartes militaires necessaires n'existent
+        // pas encore). On verifie que meme avec beaucoup d'or, la reclamation
+        // echoue silencieusement.
+        HautLieu hl = gm.getHautsLieuxDisponibles().get(0);
         Joueur j1 = gm.getJoueur1();
-        j1.ajouterOr(10);
-        j1.ajouterSymboleAlliance("Forteresse");
+        j1.ajouterOr(20);
 
+        int tailleAvant = gm.getHautsLieuxDisponibles().size();
         gm.reclamerHautLieu(hl);
 
-        assertTrue(j1.getHautsLieux().contains(hl));
-        assertFalse(gm.getHautsLieuxDisponibles().contains(hl));
+        assertEquals(tailleAvant, gm.getHautsLieuxDisponibles().size(),
+                "Hauts-Lieux desactives : la reclamation doit echouer");
+        assertFalse(j1.getHautsLieux().contains(hl));
     }
 
     // --------- Observer ---------
@@ -185,9 +220,10 @@ class GameManagerTest {
 
     @Test
     void pyramideVideAuChapitre1_transitionVersChapitre2() {
-        // On defausse toutes les cartes tour a tour jusqu'a vider le chapitre 1.
+        // On defausse les cartes du chapitre 1 jusqu'a la transition vers le ch2.
         int garde = 50; // filet anti-boucle infinie
-        while (!gm.getPyramide().getCartesAccessibles().isEmpty() && garde-- > 0) {
+        while (gm.getChapitreCourant() == 1 && garde-- > 0) {
+            if (gm.getPyramide().getCartesAccessibles().isEmpty()) break;
             gm.defausserCarte(gm.getPyramide().getCartesAccessibles().get(0));
             if (gm.estPartieTerminee()) break;
         }
@@ -210,7 +246,7 @@ class GameManagerTest {
 
     private Carte carteAvecRequisNonNull() {
         for (Carte c : gm.getPyramide().getCartes()) {
-            if (c.getSymboleRequis() != null && c.getCoutOr() > 0) return c;
+            if (!c.getSymbolesRequis().isEmpty()) return c;
         }
         return null;
     }
