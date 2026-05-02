@@ -68,4 +68,13 @@ public class Joueur {
     public List<HautLieu> getHautsLieux() {
         return hautsLieux;
     }
+
+    /** Remet le joueur a son etat initial (0 or, aucune carte ni symbole). */
+    public void reset() {
+        this.or = 0;
+        this.symbolesAlliance.clear();
+        this.cartes.clear();
+        this.symbolesCompetence.clear();
+        this.hautsLieux.clear();
+    }
 }
