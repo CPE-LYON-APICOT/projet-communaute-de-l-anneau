@@ -3,34 +3,58 @@ package fr.cpe.engine;
 import fr.cpe.model.Carte;
 import fr.cpe.model.Pyramide;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
- * Construit la pyramide complete d'un chapitre, en utilisant TOUTES les cartes
- * scannees disponibles (carte_C_NN.png).
+ * Construit la pyramide complete d'un chapitre, en utilisant les cartes
+ * définies dans cartes.csv.
  *
- * Structure (sens "base = libre, sommet = couvert", convention du code initial) :
- *  - Chapitre 1 : 20 cartes en 6-5-4-3-2  (6 cartes a la base, 2 au sommet)
+ * Structure :
+ *  - Chapitre 1 : 20 cartes en 6-5-4-3-2
  *  - Chapitre 2 : 15 cartes en 5-4-3-2-1
- *  - Chapitre 3 : 20 cartes en 6-5-4-3-2
- *
- * Couvrement :
- *  - Carte de la ligne r (taille T_r) est COUVERTE par les 2 cartes de la ligne
- *    r-1 (taille T_{r-1}) immediatement en-dessous d'elle, soit [r-1][c] et
- *    [r-1][c+1] (la ligne du dessous est plus large).
- *  - Quand les 2 cartes du dessous sont prises, la carte du dessus devient libre.
- *
- * Les attributs de jeu (couleur, alliance, competence, avance Anneau) sont
- * generes selon une rotation pour avoir de la diversite. Pour un equilibrage
- * fidele du jeu original, il faudrait les renseigner carte par carte.
+ *  - Chapitre 3 : 14 cartes en 5-4-3-2 (apres retrait des cartes militaires)
  */
 public class PyramideFactory {
 
-    private static final String[] COULEURS    = {"Jaune", "Gris", "Vert", "Rouge", "Bleu"};
-    private static final String[] ALLIANCES   = {"Hobbits", "Elves", "Dwarves", "Ents", "Gondor", "Rohan"};
-    private static final String[] COMPETENCES = {"Nourriture", "Bois", "Pierre", "Acier", "Magie"};
+    private static final Map<String, Carte> CARTES_CACHE = new HashMap<>();
+
+    static {
+        chargerCartes();
+    }
+
+    private static void chargerCartes() {
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(
+                PyramideFactory.class.getResourceAsStream("/cartes.csv"), StandardCharsets.UTF_8))) {
+            String line = br.readLine(); // Skip header
+            while ((line = br.readLine()) != null) {
+                if (line.trim().isEmpty()) continue;
+                String[] cols = line.split(";", -1);
+                
+                String fichier = cols[0].trim();
+                String couleur = cols[1].trim();
+                int coutOr = cols[2].trim().isEmpty() ? 0 : Integer.parseInt(cols[2].trim());
+                List<String> competencesRequises = cols[3].trim().isEmpty() 
+                        ? null : Arrays.asList(cols[3].trim().split("\\s*,\\s*"));
+                String alliance = cols[4].trim().isEmpty() ? null : cols[4].trim();
+                List<String> competencesDonnees = cols[5].trim().isEmpty() 
+                        ? null : Arrays.asList(cols[5].trim().split("\\s*,\\s*"));
+                int orDonne = cols[6].trim().isEmpty() ? 0 : Integer.parseInt(cols[6].trim());
+                int avanceAnneau = cols[7].trim().isEmpty() ? 0 : Integer.parseInt(cols[7].trim());
+
+                Carte c = new Carte(fichier, couleur, coutOr, alliance, competencesDonnees, competencesRequises, orDonne, avanceAnneau, fichier);
+                CARTES_CACHE.put(fichier, c);
+            }
+        } catch (Exception e) {
+            System.err.println("Erreur lors du chargement de cartes.csv : " + e.getMessage());
+        }
+    }
 
     public static Pyramide createChapitre1() {
         return creerPyramide(1, new int[]{6, 5, 4, 3, 2});
@@ -41,7 +65,7 @@ public class PyramideFactory {
     }
 
     public static Pyramide createChapitre3() {
-        return creerPyramide(3, new int[]{6, 5, 4, 3, 2});
+        return creerPyramide(3, new int[]{5, 4, 3, 2});
     }
 
     /**
@@ -50,14 +74,24 @@ public class PyramideFactory {
      */
     private static Pyramide creerPyramide(int chapitre, int[] tailleParLigne) {
         Pyramide pyramide = new Pyramide();
+
+        // 1. Recuperation et MELANGE des cartes du chapitre.
+        //    On collecte toutes les cartes dans une liste puis on shuffle pour
+        //    avoir une disposition differente a chaque partie.
+        int total = 0;
+        for (int t : tailleParLigne) total += t;
+        List<Carte> cartesChapitre = new ArrayList<>();
+        for (int i = 1; i <= total; i++) {
+            cartesChapitre.add(creerCarte(chapitre, i));
+        }
+        java.util.Collections.shuffle(cartesChapitre);
+
         Carte[][] grille = new Carte[tailleParLigne.length][];
         int idx = 0;
-
-        // 1. Creation des cartes
         for (int r = 0; r < tailleParLigne.length; r++) {
             grille[r] = new Carte[tailleParLigne[r]];
             for (int c = 0; c < tailleParLigne[r]; c++) {
-                grille[r][c] = creerCarte(chapitre, idx + 1, r);
+                grille[r][c] = cartesChapitre.get(idx);
                 idx++;
             }
         }
@@ -87,45 +121,12 @@ public class PyramideFactory {
         return pyramide;
     }
 
-    /** Genere les attributs d'une carte selon sa position dans la pyramide. */
-    private static Carte creerCarte(int chapitre, int numero, int ligne) {
+    /** Genere ou recupere une carte selon son numero. */
+    private static Carte creerCarte(int chapitre, int numero) {
         String chemin = String.format("carte_%d_%02d", chapitre, numero);
-
-        // Couleur cyclique pour varier la palette
-        String couleur = COULEURS[(numero - 1) % COULEURS.length];
-
-        // Alliance : meme cycle, plus "Forteresse" sur les rouges (cartes-Anneau)
-        String alliance;
-        if ("Rouge".equals(couleur)) {
-            alliance = "Forteresse";
-        } else {
-            alliance = ALLIANCES[(numero - 1) % ALLIANCES.length];
+        if (CARTES_CACHE.containsKey(chemin)) {
+            return CARTES_CACHE.get(chemin);
         }
-
-        // Cout : cartes du bas (ligne 0) gratuites, augmente vers le sommet
-        int cout = ligne * (chapitre);
-        if ("Jaune".equals(couleur)) cout = 0; // les jaunes sont gratuites (or)
-
-        // Competence : seulement sur les jaunes/gris/verts (cartes ressources)
-        String competence = null;
-        if ("Jaune".equals(couleur) || "Gris".equals(couleur) || "Vert".equals(couleur)) {
-            competence = COMPETENCES[(numero - 1) % COMPETENCES.length];
-        }
-
-        // Symbole requis pour reduction (jamais sur le bas, parfois sur les autres)
-        String requis = null;
-        if (ligne >= 2 && (numero % 3 == 0)) {
-            requis = COMPETENCES[(numero) % COMPETENCES.length];
-        }
-
-        // Avance Anneau : sur les rouges et certaines bleues
-        int avanceAnneau = 0;
-        if ("Rouge".equals(couleur)) {
-            avanceAnneau = chapitre; // ch1=+1, ch2=+2, ch3=+3
-        } else if ("Bleu".equals(couleur) && numero % 4 == 0) {
-            avanceAnneau = 1;
-        }
-
-        return new Carte(chemin, couleur, cout, alliance, competence, requis, avanceAnneau, chemin);
+        return new Carte(chemin, "Jaune", 0, null, null, null, 0, 0, chemin);
     }
 }
