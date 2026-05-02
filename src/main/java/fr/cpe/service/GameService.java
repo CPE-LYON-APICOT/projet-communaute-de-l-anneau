@@ -8,12 +8,20 @@ import fr.cpe.model.Joueur;
 import jakarta.inject.Inject;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.effect.DropShadow;
+import javafx.scene.control.ComboBox;
+import javafx.scene.control.Slider;
+import javafx.scene.control.ToggleButton;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.MouseButton;
+import javafx.scene.media.Media;
+import javafx.scene.media.MediaPlayer;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
@@ -28,7 +36,7 @@ import javafx.scene.text.TextAlignment;
 
 public class GameService implements GameObserver {
 
-    private static final int TAILLE_PISTE = 10; // cases 0..9
+    private static final int TAILLE_PISTE = 16; // cases 0..15 (la 15 = Mont du Destin)
 
     private final GameManager gameManager;
 
@@ -39,6 +47,8 @@ public class GameService implements GameObserver {
     private Text textOrJ2;
     private Text textSymbolesJ1;
     private Text textSymbolesJ2;
+    private Text textCompetencesJ1;
+    private Text textCompetencesJ2;
 
     // Zones dynamiques
     private HBox cartesJ1Box;
@@ -51,6 +61,18 @@ public class GameService implements GameObserver {
     private StackPane rootStack;
     private VBox ecranFin;
 
+    // Musique de fond
+    private MediaPlayer mediaPlayer;
+    private double volumeMusique = 0.3;
+    private boolean musiqueActive = true;
+    private static final java.util.LinkedHashMap<String, String> PISTES = new java.util.LinkedHashMap<>();
+    static {
+        PISTES.put("Terre du Milieu", "/audio/terre_du_milieu.mp3");
+        PISTES.put("Gondor",          "/audio/gondor.mp3");
+        PISTES.put("Khazad-dûm",      "/audio/khazad_dum.mp3");
+        PISTES.put("Moria",           "/audio/moria.mp3");
+    }
+
     @Inject
     public GameService(GameManager gameManager) {
         this.gameManager = gameManager;
@@ -59,35 +81,52 @@ public class GameService implements GameObserver {
 
     public void init(Pane gamePane) {
         rootStack = new StackPane();
-        rootStack.setPrefSize(1280, 720);
+        // Le rootStack suit la taille du gamePane parent (responsive)
+        rootStack.setMinSize(0, 0);
+        rootStack.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
+        rootStack.prefWidthProperty().bind(gamePane.widthProperty());
+        rootStack.prefHeightProperty().bind(gamePane.heightProperty());
+        // Theme Tolkien : fond sombre degrade
+        rootStack.setStyle("-fx-background-color: linear-gradient(to bottom, #1a1410, #2a1f15);");
 
         BorderPane root = new BorderPane();
-        root.setPrefSize(1280, 720);
 
-        // -------- TOP : Joueur 1 (Communauté) --------
+        // -------- TOP : Joueur 1 (Communaute) --------
         root.setTop(buildJoueurZone(true));
 
         // -------- CENTER : piste + pyramide + Hauts-Lieux --------
         BorderPane centre = new BorderPane();
-        centre.setPadding(new Insets(10));
+        centre.setPadding(new Insets(15));
 
         pisteBox = new HBox(4);
         pisteBox.setAlignment(Pos.CENTER);
-        pisteBox.setPadding(new Insets(10));
+        pisteBox.setPadding(new Insets(8));
         centre.setTop(pisteBox);
 
-        pyramideBox = new VBox(10);
+        pyramideBox = new VBox(14);
         pyramideBox.setAlignment(Pos.CENTER);
+        BorderPane.setAlignment(pyramideBox, Pos.CENTER);
         centre.setCenter(pyramideBox);
 
-        hautsLieuxBox = new VBox(8);
+        hautsLieuxBox = new VBox(10);
         hautsLieuxBox.setAlignment(Pos.TOP_CENTER);
-        hautsLieuxBox.setPadding(new Insets(10));
-        hautsLieuxBox.setStyle("-fx-background-color: #fff8e1; -fx-border-color: #bfa44a;");
+        hautsLieuxBox.setPadding(new Insets(12));
+        hautsLieuxBox.setMinWidth(180);
+        hautsLieuxBox.setStyle(
+                "-fx-background-color: linear-gradient(to bottom, #3d2f1d, #2a1f15);"
+                + " -fx-border-color: #bfa44a; -fx-border-width: 2;"
+                + " -fx-background-radius: 8; -fx-border-radius: 8;");
         Text titreHL = new Text("Hauts-Lieux");
-        titreHL.setFont(Font.font("System", FontWeight.BOLD, 14));
+        titreHL.setFont(Font.font("Serif", FontWeight.BOLD, 18));
+        titreHL.setFill(Color.GOLD);
         hautsLieuxBox.getChildren().add(titreHL);
-        centre.setRight(hautsLieuxBox);
+
+        // Conteneur droit : panneau musique au-dessus, Hauts-Lieux en dessous
+        VBox colonneDroite = new VBox(10);
+        colonneDroite.setAlignment(Pos.TOP_CENTER);
+        colonneDroite.getChildren().addAll(construirePanneauMusique(), hautsLieuxBox);
+        BorderPane.setMargin(colonneDroite, new Insets(0, 10, 0, 10));
+        centre.setRight(colonneDroite);
 
         root.setCenter(centre);
 
@@ -97,43 +136,134 @@ public class GameService implements GameObserver {
         rootStack.getChildren().add(root);
         gamePane.getChildren().add(rootStack);
 
+        // Demarrage de la musique de fond
+        chargerEtJouerMusique("Terre du Milieu");
+
         onGameStateChanged();
+    }
+
+    /** Construit la barre de controle audio (selection piste + volume + on/off). */
+    private HBox construirePanneauMusique() {
+        HBox box = new HBox(8);
+        box.setAlignment(Pos.CENTER_RIGHT);
+        box.setPadding(new Insets(6, 10, 6, 10));
+        box.setStyle("-fx-background-color: rgba(0,0,0,0.55);"
+                + " -fx-background-radius: 8; -fx-border-color: #bfa44a;"
+                + " -fx-border-width: 1; -fx-border-radius: 8;");
+
+        Text labelMusique = new Text("♪");
+        labelMusique.setFill(Color.GOLD);
+        labelMusique.setFont(Font.font("System", FontWeight.BOLD, 16));
+
+        ComboBox<String> selecteur = new ComboBox<>();
+        selecteur.getItems().addAll(PISTES.keySet());
+        selecteur.getSelectionModel().selectFirst();
+        selecteur.setPrefWidth(140);
+        selecteur.setOnAction(e -> chargerEtJouerMusique(selecteur.getValue()));
+
+        Slider sliderVolume = new Slider(0, 1, volumeMusique);
+        sliderVolume.setPrefWidth(100);
+        sliderVolume.valueProperty().addListener((obs, oldV, newV) -> {
+            volumeMusique = newV.doubleValue();
+            if (mediaPlayer != null) mediaPlayer.setVolume(volumeMusique);
+        });
+
+        ToggleButton boutonPause = new ToggleButton("⏸");
+        boutonPause.setSelected(true);
+        boutonPause.setTooltip(new javafx.scene.control.Tooltip("Pause / Reprendre"));
+        boutonPause.setOnAction(e -> {
+            musiqueActive = boutonPause.isSelected();
+            boutonPause.setText(musiqueActive ? "⏸" : "▶");
+            if (mediaPlayer != null) {
+                if (musiqueActive) mediaPlayer.play();
+                else mediaPlayer.pause();
+            }
+        });
+
+        javafx.scene.control.Button boutonStop = new javafx.scene.control.Button("⏹");
+        boutonStop.setTooltip(new javafx.scene.control.Tooltip("Arreter la musique"));
+        boutonStop.setOnAction(e -> {
+            if (mediaPlayer != null) {
+                mediaPlayer.stop();
+                musiqueActive = false;
+                boutonPause.setSelected(false);
+                boutonPause.setText("▶");
+            }
+        });
+
+        box.getChildren().addAll(labelMusique, selecteur, sliderVolume, boutonPause, boutonStop);
+        return box;
+    }
+
+    /** Charge la piste demandee et la lit en boucle. Remplace toute musique en cours. */
+    private void chargerEtJouerMusique(String nomPiste) {
+        String chemin = PISTES.get(nomPiste);
+        if (chemin == null) return;
+        java.net.URL url = getClass().getResource(chemin);
+        if (url == null) {
+            System.err.println("Musique introuvable : " + chemin);
+            return;
+        }
+        // Stoppe et libere la piste precedente
+        if (mediaPlayer != null) {
+            mediaPlayer.stop();
+            mediaPlayer.dispose();
+        }
+        try {
+            Media media = new Media(url.toExternalForm());
+            mediaPlayer = new MediaPlayer(media);
+            mediaPlayer.setCycleCount(MediaPlayer.INDEFINITE);
+            mediaPlayer.setVolume(volumeMusique);
+            if (musiqueActive) mediaPlayer.play();
+        } catch (Exception e) {
+            System.err.println("Erreur chargement musique : " + e.getMessage());
+        }
     }
 
     private VBox buildJoueurZone(boolean j1) {
         VBox zone = new VBox(6);
         zone.setAlignment(Pos.CENTER);
-        zone.setPadding(new Insets(10));
+        zone.setPadding(new Insets(12));
         zone.setStyle(j1
-                ? "-fx-background-color: #e0f7fa;"
-                : "-fx-background-color: #ffebee;");
+                ? "-fx-background-color: linear-gradient(to bottom, #1a4d6e, #0d2638);"
+                  + " -fx-border-color: #4a90c0; -fx-border-width: 0 0 2 0;"
+                : "-fx-background-color: linear-gradient(to top, #5c1a1a, #2d0d0d);"
+                  + " -fx-border-color: #c04a4a; -fx-border-width: 2 0 0 0;");
 
-        HBox ligneInfo = new HBox(20);
+        HBox ligneInfo = new HBox(25);
         ligneInfo.setAlignment(Pos.CENTER);
 
         if (j1) {
-            textTour = new Text("Tour : Joueur 1");
-            textTour.setFont(Font.font("System", FontWeight.BOLD, 14));
-            textChapitre = new Text("Chapitre 1");
-            textChapitre.setFont(Font.font("System", FontWeight.BOLD, 14));
-            textOrJ1 = new Text("Or J1 : 0");
-            textSymbolesJ1 = new Text("Alliances : -");
-            ligneInfo.getChildren().addAll(textTour, textChapitre, textOrJ1, textSymbolesJ1);
+            textTour = labelClair("Tour : Communauté", 16, true);
+            textChapitre = labelClair("Chapitre 1", 16, true);
+            textOrJ1 = labelClair("Or : 0", 14, false);
+            textSymbolesJ1 = labelClair("Symboles verts : 0/6", 13, false);
+            textCompetencesJ1 = labelClair("Compétences : -", 12, false);
+            ligneInfo.getChildren().addAll(textTour, textChapitre, textOrJ1,
+                    textSymbolesJ1, textCompetencesJ1);
 
             cartesJ1Box = new HBox(4);
             cartesJ1Box.setAlignment(Pos.CENTER);
             zone.getChildren().addAll(ligneInfo, cartesJ1Box);
         } else {
-            textOrJ2 = new Text("Or J2 : 0");
-            textSymbolesJ2 = new Text("Alliances : -");
-            ligneInfo.getChildren().addAll(textOrJ2, textSymbolesJ2);
+            textOrJ2 = labelClair("Or : 0", 14, false);
+            textSymbolesJ2 = labelClair("Symboles verts : 0/6", 13, false);
+            textCompetencesJ2 = labelClair("Compétences : -", 12, false);
+            ligneInfo.getChildren().addAll(textOrJ2, textSymbolesJ2, textCompetencesJ2);
 
             cartesJ2Box = new HBox(4);
             cartesJ2Box.setAlignment(Pos.CENTER);
-            zone.getChildren().addAll(ligneInfo, cartesJ2Box);
+            zone.getChildren().addAll(cartesJ2Box, ligneInfo);
         }
 
         return zone;
+    }
+
+    private static Text labelClair(String texte, int taille, boolean gras) {
+        Text t = new Text(texte);
+        t.setFill(Color.WHITE);
+        t.setFont(Font.font("Serif", gras ? FontWeight.BOLD : FontWeight.NORMAL, taille));
+        return t;
     }
 
     // =========================================================================
@@ -143,21 +273,26 @@ public class GameService implements GameObserver {
     @Override
     public void onGameStateChanged() {
         if (textTour != null) {
-            textTour.setText("Tour : Joueur "
-                    + (gameManager.getJoueurCourant() == gameManager.getJoueur1() ? "1" : "2"));
+            textTour.setText("Tour : " + gameManager.nomJoueur(gameManager.getJoueurCourant()));
         }
         if (textChapitre != null) {
             textChapitre.setText("Chapitre " + gameManager.getChapitreCourant());
         }
         if (textOrJ1 != null && textOrJ2 != null) {
-            textOrJ1.setText("Or J1 : " + gameManager.getJoueur1().getOr());
-            textOrJ2.setText("Or J2 : " + gameManager.getJoueur2().getOr());
+            textOrJ1.setText("Or : " + gameManager.getJoueur1().getOr());
+            textOrJ2.setText("Or : " + gameManager.getJoueur2().getOr());
         }
         if (textSymbolesJ1 != null) {
             textSymbolesJ1.setText(formatAlliances(gameManager.getJoueur1()));
         }
         if (textSymbolesJ2 != null) {
             textSymbolesJ2.setText(formatAlliances(gameManager.getJoueur2()));
+        }
+        if (textCompetencesJ1 != null) {
+            textCompetencesJ1.setText(formatCompetences(gameManager.getJoueur1()));
+        }
+        if (textCompetencesJ2 != null) {
+            textCompetencesJ2.setText(formatCompetences(gameManager.getJoueur2()));
         }
         if (pyramideBox != null && gameManager.getPyramide() != null) {
             mettreAJourPyramide();
@@ -169,8 +304,46 @@ public class GameService implements GameObserver {
     }
 
     private String formatAlliances(Joueur j) {
-        if (j.getSymbolesAlliance().isEmpty()) return "Alliances : -";
-        return "Alliances : " + String.join(", ", j.getSymbolesAlliance());
+        // Compte les symboles distincts apportes par les cartes vertes du joueur.
+        java.util.Set<String> symbolesVerts = new java.util.HashSet<>();
+        for (Carte c : j.getCartes()) {
+            if ("Vert".equalsIgnoreCase(c.getCouleur())) {
+                symbolesVerts.addAll(c.getSymbolesCompetences());
+            }
+        }
+        if (symbolesVerts.isEmpty()) {
+            return "Symboles verts : 0/6";
+        }
+        return "Symboles verts : " + symbolesVerts.size() + "/6 ("
+                + String.join(", ", symbolesVerts) + ")";
+    }
+
+    /** Detail des competences du joueur, comptees a partir de cartes non vertes
+     *  (les cartes vertes ne donnent que des symboles, pas des competences classiques). */
+    private String formatCompetences(Joueur j) {
+        java.util.Map<String, Integer> compteur = new java.util.LinkedHashMap<>();
+        // Ordre fixe : 5 competences classiques en premier, puis le reste.
+        for (String c : new String[]{"assassin", "roi", "erudit", "barbare", "forgeron"}) {
+            compteur.put(c, 0);
+        }
+        for (Carte c : j.getCartes()) {
+            // On ne compte que les competences sur cartes NON vertes (les cartes
+            // vertes apportent des symboles, pas des competences au sens metier).
+            if ("Vert".equalsIgnoreCase(c.getCouleur())) continue;
+            for (String comp : c.getSymbolesCompetences()) {
+                compteur.merge(comp, 1, Integer::sum);
+            }
+        }
+        StringBuilder sb = new StringBuilder("Compétences : ");
+        boolean premier = true;
+        for (java.util.Map.Entry<String, Integer> e : compteur.entrySet()) {
+            if (e.getValue() == 0) continue;
+            if (!premier) sb.append(", ");
+            sb.append(e.getKey()).append(" x").append(e.getValue());
+            premier = false;
+        }
+        if (premier) sb.append("-");
+        return sb.toString();
     }
 
     private void mettreAJourPyramide() {
@@ -195,7 +368,7 @@ public class GameService implements GameObserver {
         java.util.List<Carte> presentes = gameManager.getPyramide().getCartes();
 
         for (int r = lignes.size() - 1; r >= 0; r--) {
-            HBox ligneBox = new HBox(6);
+            HBox ligneBox = new HBox(14);  // +espacement pour laisser respirer le hover
             ligneBox.setAlignment(Pos.CENTER);
             for (Carte carte : lignes.get(r)) {
                 if (!presentes.contains(carte)) {
@@ -259,8 +432,8 @@ public class GameService implements GameObserver {
         return img;
     }
 
-    private static final double TAILLE_VIGNETTE_W = 75;
-    private static final double TAILLE_VIGNETTE_H = 105;
+    private static final double TAILLE_VIGNETTE_W = 100;
+    private static final double TAILLE_VIGNETTE_H = 145;
 
     private StackPane construireVignetteCarte(Carte carte, boolean cliquable) {
         StackPane pane = new StackPane();
@@ -293,14 +466,14 @@ public class GameService implements GameObserver {
 
             StringBuilder label = new StringBuilder(carte.getNom());
             label.append("\nCoût: ").append(carte.getCoutOr());
-            if (carte.getSymboleRequis() != null) {
-                label.append(" (").append(carte.getSymboleRequis()).append(")");
+            if (carte.getSymbolesRequis() != null && !carte.getSymbolesRequis().isEmpty()) {
+                label.append(" (").append(String.join(", ", carte.getSymbolesRequis())).append(")");
             }
             if (carte.getSymboleAlliance() != null && !carte.getSymboleAlliance().isEmpty()) {
                 label.append("\n⚑ ").append(carte.getSymboleAlliance());
             }
-            if (carte.getSymboleCompetence() != null) {
-                label.append("\n◆ ").append(carte.getSymboleCompetence());
+            if (carte.getSymbolesCompetences() != null && !carte.getSymbolesCompetences().isEmpty()) {
+                label.append("\n◆ ").append(String.join(", ", carte.getSymbolesCompetences()));
             }
             if (carte.getAvanceAnneau() > 0) {
                 label.append("\n↯ Anneau +").append(carte.getAvanceAnneau());
@@ -378,23 +551,58 @@ public class GameService implements GameObserver {
             rect.setStroke(Color.BLACK);
 
             StringBuilder eff = new StringBuilder();
-            if (carte.getSymboleCompetence() != null) eff.append("◆");
+            if (carte.getSymbolesCompetences() != null && !carte.getSymbolesCompetences().isEmpty()) eff.append("◆");
             if (carte.getAvanceAnneau() > 0) eff.append("↯");
             if ("Forteresse".equals(carte.getSymboleAlliance())) eff.append("⚑");
 
             Text t = new Text(eff.toString());
             t.setFont(Font.font("System", FontWeight.BOLD, 10));
             vignette.getChildren().addAll(rect, t);
+
+            // Clic = zoom plein ecran sur la carte
+            vignette.setStyle("-fx-cursor: hand;");
+            vignette.setOnMouseClicked(e -> afficherCarteZoomee(carte));
+
             box.getChildren().add(vignette);
         }
+    }
+
+    /** Overlay plein ecran montrant le scan de la carte cliquee. Clic ferme l'overlay. */
+    private void afficherCarteZoomee(Carte carte) {
+        if (rootStack == null) return;
+        StackPane overlay = new StackPane();
+        overlay.setStyle("-fx-background-color: rgba(0,0,0,0.85);");
+
+        Image img = chargerImageCarte(carte);
+        if (img != null) {
+            ImageView iv = new ImageView(img);
+            iv.setPreserveRatio(true);
+            // Taille adaptee a la fenetre : 70% de la hauteur disponible
+            iv.fitHeightProperty().bind(rootStack.heightProperty().multiply(0.7));
+            overlay.getChildren().add(iv);
+        } else {
+            // Fallback : afficher le nom et les attributs
+            VBox info = new VBox(8);
+            info.setAlignment(Pos.CENTER);
+            Text titre = new Text(carte.getNom());
+            titre.setFill(Color.WHITE);
+            titre.setFont(Font.font("Serif", FontWeight.BOLD, 28));
+            info.getChildren().add(titre);
+            overlay.getChildren().add(info);
+        }
+
+        // Clic n'importe ou sur l'overlay = fermer
+        overlay.setOnMouseClicked(e -> rootStack.getChildren().remove(overlay));
+        rootStack.getChildren().add(overlay);
     }
 
     private void mettreAJourPiste() {
         if (pisteBox == null) return;
         pisteBox.getChildren().clear();
 
-        Text titre = new Text("Piste de l'Anneau : ");
-        titre.setFont(Font.font("System", FontWeight.BOLD, 13));
+        Text titre = new Text("Piste de l'Anneau ");
+        titre.setFont(Font.font("Serif", FontWeight.BOLD, 16));
+        titre.setFill(Color.GOLD);
         pisteBox.getChildren().add(titre);
 
         int posCom = gameManager.getPisteAnneau().getPositionCommunaute();
@@ -402,31 +610,38 @@ public class GameService implements GameObserver {
 
         for (int i = 0; i < TAILLE_PISTE; i++) {
             StackPane case_ = new StackPane();
-            Rectangle rect = new Rectangle(34, 34);
+            Rectangle rect = new Rectangle(40, 40);
             if (i == TAILLE_PISTE - 1) {
                 rect.setFill(Color.GOLD);
+                rect.setStroke(Color.DARKGOLDENROD);
             } else {
                 rect.setFill(Color.WHEAT);
+                rect.setStroke(Color.SADDLEBROWN);
             }
-            rect.setStroke(Color.BLACK);
+            rect.setStrokeWidth(1.5);
+            rect.setArcWidth(6);
+            rect.setArcHeight(6);
             case_.getChildren().add(rect);
 
-            // Numéro de case
             Text num = new Text(String.valueOf(i));
-            num.setFont(Font.font("System", 9));
+            num.setFont(Font.font("System", FontWeight.BOLD, 10));
+            num.setFill(Color.SADDLEBROWN);
             StackPane.setAlignment(num, Pos.TOP_LEFT);
+            StackPane.setMargin(num, new Insets(2, 0, 0, 4));
             case_.getChildren().add(num);
 
             HBox pions = new HBox(2);
             pions.setAlignment(Pos.CENTER);
             if (i == posCom) {
-                Circle pionCom = new Circle(6, Color.DODGERBLUE);
-                pionCom.setStroke(Color.BLACK);
+                Circle pionCom = new Circle(8, Color.DODGERBLUE);
+                pionCom.setStroke(Color.WHITE);
+                pionCom.setStrokeWidth(2);
                 pions.getChildren().add(pionCom);
             }
             if (i == posNaz) {
-                Circle pionNaz = new Circle(6, Color.BLACK);
+                Circle pionNaz = new Circle(8, Color.BLACK);
                 pionNaz.setStroke(Color.DARKRED);
+                pionNaz.setStrokeWidth(2);
                 pions.getChildren().add(pionNaz);
             }
             case_.getChildren().add(pions);
@@ -444,17 +659,27 @@ public class GameService implements GameObserver {
         }
 
         for (HautLieu hl : gameManager.getHautsLieuxDisponibles()) {
-            VBox carte = new VBox(2);
+            VBox carte = new VBox(3);
             carte.setAlignment(Pos.CENTER);
-            carte.setPadding(new Insets(6));
-            carte.setStyle("-fx-background-color: #fff3cd; -fx-border-color: #8b6f1c;");
+            carte.setPadding(new Insets(8));
+            carte.setStyle(
+                    "-fx-background-color: linear-gradient(to bottom, #f5e9b8, #d4ba6a);"
+                    + " -fx-border-color: #8b6f1c; -fx-border-width: 2;"
+                    + " -fx-background-radius: 6; -fx-border-radius: 6;");
 
             Text nom = new Text(hl.getNom());
-            nom.setFont(Font.font("System", FontWeight.BOLD, 12));
-            Text cout = new Text(hl.getCoutOr() + " or, " + hl.getCoutForteresses() + " ⚑");
-            cout.setFont(Font.font("System", 11));
+            nom.setFont(Font.font("Serif", FontWeight.BOLD, 14));
+            nom.setFill(Color.web("#3a2a0a"));
+            Text cout = new Text(hl.getCoutOr() + " or • " + hl.getCoutForteresses() + " ⚑");
+            cout.setFont(Font.font("System", FontWeight.BOLD, 12));
+            cout.setFill(Color.web("#5a3a0a"));
             Text effet = new Text(hl.getEffet());
-            effet.setFont(Font.font("System", 10));
+            effet.setFont(Font.font("System", 11));
+            effet.setFill(Color.web("#3a2a0a"));
+
+            // Hover effect sur les Hauts-Lieux aussi
+            carte.setOnMouseEntered(e -> carte.setEffect(new DropShadow(12, Color.GOLD)));
+            carte.setOnMouseExited(e -> carte.setEffect(null));
 
             carte.getChildren().addAll(nom, cout, effet);
 
@@ -470,7 +695,8 @@ public class GameService implements GameObserver {
 
         if (gameManager.getHautsLieuxDisponibles().isEmpty()) {
             Text vide = new Text("(Tous réclamés)");
-            vide.setFont(Font.font("System", 10));
+            vide.setFont(Font.font("Serif", FontWeight.NORMAL, 12));
+            vide.setFill(Color.LIGHTGRAY);
             hautsLieuxBox.getChildren().add(vide);
         }
     }
@@ -479,25 +705,54 @@ public class GameService implements GameObserver {
         if (rootStack == null) return;
 
         if (gameManager.estPartieTerminee()) {
+            // Arrete la musique a la fin de partie (les boutons permettent de la relancer si besoin)
+            if (mediaPlayer != null) {
+                mediaPlayer.pause();
+            }
+
             if (ecranFin == null) {
-                ecranFin = new VBox(12);
+                ecranFin = new VBox(18);
                 ecranFin.setAlignment(Pos.CENTER);
-                ecranFin.setStyle("-fx-background-color: rgba(0,0,0,0.75);");
+                ecranFin.setStyle("-fx-background-color: rgba(0,0,0,0.85);");
+
                 Text titre = new Text("FIN DE LA PARTIE");
                 titre.setFill(Color.WHITE);
-                titre.setFont(Font.font("System", FontWeight.BOLD, 36));
+                titre.setFont(Font.font("Serif", FontWeight.BOLD, 42));
+
                 Text vainqueur = new Text();
                 vainqueur.setFill(Color.GOLD);
-                vainqueur.setFont(Font.font("System", FontWeight.BOLD, 22));
+                vainqueur.setFont(Font.font("Serif", FontWeight.BOLD, 24));
+                vainqueur.setTextAlignment(TextAlignment.CENTER);
                 vainqueur.setId("vainqueurText");
-                ecranFin.getChildren().addAll(titre, vainqueur);
+
+                javafx.scene.control.Button rejouer = new javafx.scene.control.Button("Rejouer");
+                rejouer.setStyle(
+                        "-fx-background-color: #2d6a4f; -fx-text-fill: white;"
+                        + " -fx-font-size: 16px; -fx-font-weight: bold;"
+                        + " -fx-padding: 10 30; -fx-background-radius: 6;");
+                rejouer.setOnAction(e -> {
+                    gameManager.reset();
+                    if (mediaPlayer != null) mediaPlayer.play(); // relance la musique
+                });
+
+                javafx.scene.control.Button quitter = new javafx.scene.control.Button("Quitter");
+                quitter.setStyle(
+                        "-fx-background-color: #6a2d2d; -fx-text-fill: white;"
+                        + " -fx-font-size: 16px; -fx-font-weight: bold;"
+                        + " -fx-padding: 10 30; -fx-background-radius: 6;");
+                quitter.setOnAction(e -> javafx.application.Platform.exit());
+
+                HBox boutons = new HBox(20, rejouer, quitter);
+                boutons.setAlignment(Pos.CENTER);
+
+                ecranFin.getChildren().addAll(titre, vainqueur, boutons);
                 rootStack.getChildren().add(ecranFin);
             }
             // Mettre à jour le texte du vainqueur
             for (javafx.scene.Node n : ecranFin.getChildren()) {
                 if ("vainqueurText".equals(n.getId()) && n instanceof Text) {
                     String v = gameManager.getVainqueurFinal();
-                    ((Text) n).setText(v != null ? "Vainqueur : " + v : "Partie terminée");
+                    ((Text) n).setText(v != null ? v : "Partie terminée");
                 }
             }
         } else if (ecranFin != null) {
