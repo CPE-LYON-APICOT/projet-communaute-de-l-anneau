@@ -1,0 +1,8 @@
+fatal : La branche courante developpement n'a pas de branche amont.
+Pour pousser la branche courante et définir la distante comme amont, utilisez
+
+    git push --set-upstream origin developpement
+
+Pour que cela soit fait automatiquement pour les branches sans
+suivi distant, voir "push.autoSetupRemote' dans 'git help config'.
+
