@@ -121,10 +121,11 @@ public class GameService implements GameObserver {
         titreHL.setFill(Color.GOLD);
         hautsLieuxBox.getChildren().add(titreHL);
 
-        // Conteneur droit : panneau musique au-dessus, Hauts-Lieux en dessous
+        // Conteneur droit : panneau musique en haut, bouton Regles, puis Hauts-Lieux
         VBox colonneDroite = new VBox(10);
         colonneDroite.setAlignment(Pos.TOP_CENTER);
-        colonneDroite.getChildren().addAll(construirePanneauMusique(), hautsLieuxBox);
+        colonneDroite.getChildren().addAll(construirePanneauMusique(),
+                construireBoutonRegles(), hautsLieuxBox);
         BorderPane.setMargin(colonneDroite, new Insets(0, 10, 0, 10));
         centre.setRight(colonneDroite);
 
@@ -218,6 +219,94 @@ public class GameService implements GameObserver {
         } catch (Exception e) {
             System.err.println("Erreur chargement musique : " + e.getMessage());
         }
+    }
+
+    /** Bouton qui ouvre l'overlay des regles. */
+    private javafx.scene.control.Button construireBoutonRegles() {
+        javafx.scene.control.Button bouton = new javafx.scene.control.Button("📖 Règles");
+        bouton.setMaxWidth(Double.MAX_VALUE);
+        bouton.setStyle(
+                "-fx-background-color: linear-gradient(to bottom, #3d2f1d, #2a1f15);"
+                + " -fx-text-fill: gold; -fx-font-size: 14px; -fx-font-weight: bold;"
+                + " -fx-border-color: #bfa44a; -fx-border-width: 2;"
+                + " -fx-background-radius: 8; -fx-border-radius: 8;"
+                + " -fx-padding: 6 12;");
+        bouton.setOnAction(e -> afficherRegles());
+        return bouton;
+    }
+
+    /** Overlay plein ecran avec le texte des regles. Clic n'importe ou ferme. */
+    private void afficherRegles() {
+        if (rootStack == null) return;
+        StackPane overlay = new StackPane();
+        overlay.setStyle("-fx-background-color: rgba(0,0,0,0.92);");
+
+        VBox contenu = new VBox(14);
+        contenu.setAlignment(Pos.TOP_LEFT);
+        contenu.setMaxWidth(720);
+        contenu.setPadding(new Insets(30));
+
+        Text titre = new Text("Règles du jeu");
+        titre.setFill(Color.GOLD);
+        titre.setFont(Font.font("Serif", FontWeight.BOLD, 32));
+
+        contenu.getChildren().add(titre);
+        contenu.getChildren().add(sectionRegles("But du jeu",
+                "Trois façons de gagner :\n"
+                + "  1. La Communauté atteint la case 15 (Mont du Destin)\n"
+                + "  2. Les Nazguls rattrapent la Communauté sur la Piste de l'Anneau\n"
+                + "  3. Posséder 6 cartes vertes avec 6 symboles différents"));
+
+        contenu.getChildren().add(sectionRegles("À ton tour",
+                "  • Clic GAUCHE sur une carte libre = l'acheter (paie le coût)\n"
+                + "  • Clic DROIT sur une carte libre = la défausser pour gagner 2 or"));
+
+        contenu.getChildren().add(sectionRegles("Coût d'une carte",
+                "Coût final = coût de base (or) + 1 or par symbole requis qui te manque.\n"
+                + "Plus tu accumules de compétences (gris) et de symboles (verts), moins\n"
+                + "les cartes coûtent cher dans la suite."));
+
+        contenu.getChildren().add(sectionRegles("Couleurs des cartes",
+                "  • Jaune : donne directement de l'or\n"
+                + "  • Gris  : donne une compétence (assassin, roi, erudit, barbare, forgeron)\n"
+                + "  • Vert  : donne un symbole (corne, fiole, marteau, pipe, coquillage, feuille)\n"
+                + "  • Bleu  : fait avancer l'Anneau (Communauté pour J1, Nazguls pour J2)"));
+
+        contenu.getChildren().add(sectionRegles("Pyramide",
+                "Une carte couverte par d'autres ne peut pas être prise. Quand tu retires\n"
+                + "les cartes du dessus, celles du dessous deviennent disponibles. Les cartes\n"
+                + "encore couvertes sont affichées avec le dos correspondant au chapitre."));
+
+        contenu.getChildren().add(sectionRegles("Piste de l'Anneau",
+                "Communauté part de la case 5, Nazguls de la case 0. La piste fait 16 cases.\n"
+                + "La case 15 (dorée) est le Mont du Destin."));
+
+        contenu.getChildren().add(sectionRegles("Chapitres",
+                "Trois chapitres successifs (pyramides de 20, 15 et 14 cartes). Si aucune\n"
+                + "victoire n'est atteinte à la fin du chapitre 3, le joueur le plus avancé\n"
+                + "sur la Piste l'emporte au score (égalité possible)."));
+
+        Text fermeture = new Text("\nClique n'importe où pour fermer");
+        fermeture.setFill(Color.LIGHTGRAY);
+        fermeture.setFont(Font.font("System", FontWeight.NORMAL, 12));
+        contenu.getChildren().add(fermeture);
+
+        overlay.getChildren().add(contenu);
+        overlay.setOnMouseClicked(e -> rootStack.getChildren().remove(overlay));
+        rootStack.getChildren().add(overlay);
+    }
+
+    /** Construit une section titrée pour l'écran des règles. */
+    private VBox sectionRegles(String titreSection, String corps) {
+        VBox box = new VBox(4);
+        Text t = new Text(titreSection);
+        t.setFill(Color.GOLD);
+        t.setFont(Font.font("Serif", FontWeight.BOLD, 17));
+        Text c = new Text(corps);
+        c.setFill(Color.WHITE);
+        c.setFont(Font.font("Monospaced", 13));
+        box.getChildren().addAll(t, c);
+        return box;
     }
 
     private VBox buildJoueurZone(boolean j1) {
